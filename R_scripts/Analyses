@@ -1,0 +1,72 @@
+Eventually, want to do: 
+
+1. Not downsampled- TOO BIG
+2. Downsampled by 2
+3. Downsampled by 2, PC-reduced
+4. Downsampled by 4, PC-reduced
+
+
+1. In /projects/julie/Masters/bpipe/bpipe_CAMH/bpipe_outputs/
+
+datafiles<-lapply(Sys.glob("*6mm.modulated.log.gm.mnc"),mincIO.readVolume,VolumeType="anatomical")
+
+dim(datafiles[[1]])
+[1] 193 229 193
+
+193*229*193
+[1] 8530021
+
+data<-matrix(,nrow=190,ncol=8530021)
+
+for (i in 1:190){
++ data[i,]<-as.vector(datafiles[[i]])
++ }
+
+Error: cannot allocate vector of size 12.1 Gb
+
+CONCLUSION: CANNOT USE NON-DOWNSAMPLED DATA, TOO BIG
+
+Non-downsampled data. Had to remove H087. (which was 53rd HC subject)
+Now have subjects 1-102 HC; 103-190 SCZ. 
+Re-adjust HC trainig indices from 53 & up; 53 was not included in the training set. Now need to subtract one from all indices after 53 (so control_indices[39] and up
+
+control_indices<-read.csv("/projects/julie/Masters/bpipe/bpipe_CAMH_downsampled/control_indices")
+scz_indices<-read.csv("/projects/julie/Masters/bpipe/bpipe_CAMH_downsampled/scz_indices")
+
+control_indices<-control_indices[,2]
+control_indices_test<-control_indices[39:69]-1
+tmp<-c(control_indices[1:38],control_indices_test)
+control_indices<-tmp
+
+Re-adjust SCZ indices (add 102 instead of 103), and re-make training_indices
+
+train_indices<-c(control_indices,scz_indices+102)
+
+#Add all diagnoses to data
+
+#Run glmnet
+library(glmnet)
+
+4. Downsampled by 4, PC-reduced
+
+library(RMINC)
+R_DEBUG_mincIO=FALSE
+datafiles<-lapply(Sys.glob("../*6mm.modulated.log.gm_dwnsmpld_4.mnc"),mincIO.readVolume,VolumeType="anatomical")
+dim(datafiles[[1]])
+[1] 47 58 49
+47*58*49
+[1] 133574
+GM_6mm_modulated_log_dwnsmpld_4<-matrix(,nrow=191,ncol=133574)
+for (i in 1:191){
++ GM_6mm_modulated_log_dwnsmpld_4[i,]<-as.vector(datafiles[[i]])
++ }
+train_indices_qc<-read.csv("../train_indices_qc")
+train_indices_qc<-train_indices_qc[,2]
+dx_train_qc<-read.csv("../dx_train_qc")
+dx_train_qc<-dx_train_qc[,2]
+GM_6mm_modulated_log_dwnsmpld_4_qc<-GM_6mm_modulated_log_dwnsmpld_4[-152,]
+GM_6mm_modulated_log_dwnsmpld_4_qc<-GM_6mm_modulated_log_dwnsmpld_4_qc[-105,]
+GM_6mm_modulated_log_dwnsmpld_4_qc_means<-apply(GM_6mm_modulated_log_dwnsmpld_4_qc,2,scale,scale=FALSE,center=TRUE)
+GM_6mm_modulated_log_dwnsmpld_4_qc_pca_train<-prcomp(GM_6mm_modulated_log_dwnsmpld_4_qc_means[train_indices_qc,])
+
+

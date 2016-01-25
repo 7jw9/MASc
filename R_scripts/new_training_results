@@ -1,0 +1,13 @@
+LDA- have sens., spec., acc. already
+SVM- lin/nlin (tot.acc)
+
+LOGISTIC REGRESSION
+LR- cv.model with type.measure="class"
+
+cv.model.class<-cv.glmnet(gm_pca_train$x[,1:n_pcs],dx[train_indices],family="binomial",alpha=0.45,nfolds=10,type.measure="class")
+
+which(cv.model$lambda==cv.model$lambda.min) 
+
+cv.model.class$cvm[index]
+
+

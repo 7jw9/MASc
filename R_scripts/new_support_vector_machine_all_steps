@@ -1,0 +1,56 @@
+cat("Loading e1071 library\n")
+library(e1071) # load library e1071
+
+dx_train<-dx[train_indices]
+dx_train<-as.factor(dx_train)
+
+cat("Creating dataframe for SVM\n")
+data_for_svm<-gm_pca_train$x[,1:n_pcs]
+data_for_svm<-as.data.frame(data_for_svm)
+data_for_svm<-cbind(dx_train,data_for_svm)
+
+cat("Creating creating matrices for Cost optimization\n")
+y<-matrix(, nrow=999, ncol=2)
+x<-matrix(, nrow=1000,ncol=2)
+
+y[,1]<-seq(from=0.0001, to=0.0999, by=0.0001) # sequence from 0 to 0.0999 in increments of 0.0001 (C>0)
+x[,1]<-seq(from=0.1, to=100, by=0.1) # sequence from 0.1 to 100 in increments of 0.1
+
+cat("Looping through Cost values from 0.0001 to 0.0999\n")
+for (i in 1:999) {
+svm.model<-svm(dx_train~.,data=data_for_svm,kernel="linear",cost=y[i,1],cross=10,scale=FALSE)
+y[i,2]<-svm.model$tot.accuracy
+}
+
+cat("Looping through Cost values from 0.1 to 100\n")
+for (i in 1:1000) {
+svm.model<-svm(dx_train~.,data=data_for_svm,kernel="linear",cost=x[i,1],cross=10,scale=FALSE)
+x[i,2]<-svm.model$tot.accuracy
+}
+
+cat("Combining matrices x and y\n")
+z<-rbind(y,x)
+
+cat("Best accuracy is:\n")
+max(z[,2])
+
+cat("Best Cost is:\n")
+z[which.max(z[,2]),1]
+optimal.cost<-z[which.max(z[,2]),1]
+
+cat("Computing svm model based on optimal Cost\n")
+svm.model<-svm(dx_train~., data=data_for_svm,kernel="linear",cost=optimal.cost,cross=10,scale=FALSE)
+
+cat("Predicting classes for test validation\n")
+svm.pred<-predict(svm.model,pred.data[,1:n_pcs])
+
+cat("Final accuracies\n")
+results<-table(svm.pred,dx[-train_indices])
+
+sens<-results[4]/(results[3]+results[4])
+
+spec<-results[1]/(results[1]+results[2])
+
+acc<-(results[1]+results[4])/(results[1]+results[2]+results[3]+results[4])
+
+train.acc<-svm.model$tot.accuracy

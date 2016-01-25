@@ -1,0 +1,27 @@
+TRAIN
+-------
+library(MASS)
+fit.train<-lda(data_for_svm[,-1],data_for_svm[,1],CV=TRUE)
+
+#Training set accuracy
+results<-table(fit.train$class,dx[train_indices])
+
+sens<-results[4]/(results[3]+results[4])
+
+spec<-results[1]/(results[1]+results[2])
+
+acc<-(results[1]+results[4])/(results[1]+results[2]+results[3]+results[4])
+
+TEST
+-------
+fit.validation<-lda(data_for_svm[,-1],data_for_svm[,1],CV=FALSE)
+
+#Validation set accuracy
+lda.pred<-predict(fit.validation,pred.data[,1:n_pcs])
+results<-table(lda.pred$class,dx[-train_indices])
+
+sens<-results[4]/(results[3]+results[4])
+
+spec<-results[1]/(results[1]+results[2])
+
+acc<-(results[1]+results[4])/(results[1]+results[2]+results[3]+results[4])

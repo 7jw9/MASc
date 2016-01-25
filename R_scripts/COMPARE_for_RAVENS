@@ -1,0 +1,10 @@
+while read line; do cp ../${line}_ravens.* train_subjects_COMPARE/; done < subjects_train.csv
+while read line; do cp ../${line}_ravens.* test_subjects_COMPARE/; done < subjects_test.csv
+
+update COMPARE_input file
+	path name
+	name of files (":%s/search/replace" in vi)
+
+source /projects/julie/Masters/VBM/COMPARE_for_x86_64/compare_path
+
+Compare COMPARE_input results -m model -S spatial_map

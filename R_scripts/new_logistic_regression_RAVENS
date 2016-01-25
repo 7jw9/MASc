@@ -1,0 +1,51 @@
+library(RMINC)
+R_DEBUG_mincIO=FALSE
+datafiles<-lapply(Sys.glob("*.mnc"),mincIO.readVolume,VolumeType="anatomical")
+gm<-matrix(,nrow=length(datafiles),ncol=1068592)
+
+for (i in 1:length(datafiles)){
+	gm[i,]<-as.vector(datafiles[[i]])
+}
+
+train_indices<-read.csv("train_indices")
+train_indices<-train_indices[,2]
+
+dx<-read.csv("dx")
+dx<-dx[,2]
+
+gm_means<-apply(gm,2,scale,scale=FALSE,center=TRUE)
+
+gm_pca_train<-prcomp(gm_means[train_indices,])
+
+summary(gm_pca_train)
+
+npcs<-num
+
+pred.data<-predict(gm_pca_train,gm_means[-train_indices,])
+
+library(glmnet)
+
+source("/projects/julie/Masters/elastic_net_loop.R")
+
+plot(alpha,optimal.dev)
+
+optimal.alpha=x
+
+cv.model <- cv.glmnet(gm_pca_train$x[,1:n_pcs],dx[train_indices],family="binomial",alpha=optimal.alpha,nfolds=10,type.measure="deviance")
+
+test_prediction<-predict(cv.model,newx=pred.data[,1:n_pcs],s="lambda.min",type="class")
+
+results<-table(test_prediction,dx[-train_indices])
+
+sens<-results[4]/(results[3]+results[4])
+
+spec<-results[1]/(results[1]+results[2])
+
+acc<-(results[1]+results[4])/(results[1]+results[2]+results[3]+results[4])
+
+Train Accuracy:
+cv.model.class <- cv.glmnet(gm_pca_train$x[,1:n_pcs],dx[train_indices],family="binomial",alpha=optimal.alpha,nfolds=10,type.measure="class")
+
+lambda<-which(cv.model$lambda==cv.model$lambda.min) 
+
+train.acc<-1-(cv.model.class$cvm[lambda])

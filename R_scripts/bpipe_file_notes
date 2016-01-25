@@ -1,0 +1,107 @@
+- H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.mnc - GM/WM/CSF mask, in mni template space
+- H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc - GM mask, blurred with 2mm Gaussian kernel; 2, 4, and 6mm kernels have same voxel dimensions
+- H007.n4correct.affine_register_masked.nonlinear_register_inverse_grid_determinant.mnc - Jacobian determinant, in mni space
+- H007.n4correct.affine_register_masked.nonlinear_register_inverse_grid_determinant_resampled.mnc - same as above, seems resampling doesn't do anything
+- H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.det_blur.mnc -  blurred Jacobian determinant
+	-> why blurring determinant? If load into Display, looks like are losing a lot of information in blurring step
+	-> try modulating with just straight determinant (H007.n4correct.affine_register_masked.nonlinear_register_grid_determinant.mnc) instead of blurred determinant (NOTE: now using straight determinant instead of inverse determinant, because straight transformation goes from subject to model, and that is transformation we want to modulate. Realistically, shouldn't matter, as inverse determinant is just negative of straight determinant)
+- minccalc -verbose -expression 'log(A[0]+1)*A[1]' H007.n4correct.affine_register_masked.nonlinear_register_grid_determinant.mnc H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.modulated.log.gm.mnc
+- doing minccalc right with log(A[0]+1)*A[1]? 
+	-> try in multiple steps: minccalc A[0]+1; then minccalc log(A[0]) vs. minccalc log(A[0]+1)
+		-> the same
+	-> minccalc log(A[0]+1)*A[1] same as minccalc log(A[0]+1)? 
+- minccalc step currently multiplies determinant*transform_image- does it matter if multiply with other file first? 
+- modulating by determinant plus one gives more reasonable image
+
+- H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.modulated.gm.mnc - modulated by inverse, 2mm blurred Jacobian
+- determinant_by_image_plus_one_modulated.mnc - modulated by forward (straight), unblurred Jacobian
+
+IGNORE THIS {
+---------
+Objective: Blurred or unblurred Jacobian?
+Test difference between: 
+
+minccalc -expression '(A[0]+1)*A[1]' H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.det_blur.mnc H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc blurred_det_plus_one_by_blurred_image_one_step.mnc (this is what was used in bpipe)
+
+minccalc -expression '(A[0]+1)*A[1]' H007.n4correct.affine_register_masked.nonlinear_register_grid_determinant.mnc H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc det_plus_one_by_blurred_image_one_step.mnc
+
+CONCLUSION: unblurred determinant is better than blurred determinant
+}
+
+----------
+Objective: Adding 1 to det & multiplying by image in same step ok?
+Ok, test difference between: 
+
+	minccalc -expression '(A[0]+1)*A[1]' H007.n4correct.affine_register_masked.nonlinear_register_grid_determinant.mnc H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc det_plus_one_by_blurred_image_one_step.mnc
+
+	minccalc -expression 'A[0]*A[1]' determinant_plus_one.mnc H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc det_plus_one_by_blurred_image_multi_step.mnc
+
+CONCLUSION: SAME
+
+----------
+Objective: Order of files matter?
+Test difference between: 
+
+	minccalc -expression 'A[0]*A[1]' determinant_plus_one.mnc H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc det_plus_one_by_blurred_image.mnc (this is the order used by bpipe)
+
+	minccalc -expression 'A[0]*A[1]' H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc determinant_plus_one.mnc blurred_image_by_det_plus_one.mnc
+
+CONCLUSION: YES, this does matter. Need to multiply image*det (ie. modulate image by det) NOT det*image
+
+THEREFORE: Best command so far is:
+
+	minccalc -expression 'A[0]*(A[1]+1)' H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc  H007.n4correct.affine_register_masked.nonlinear_register_grid_determinant.mnc blurred_image_by_det_plus_one_one_step.mnc
+
+-----------
+Objective: Adding 1, taking log of det, and multiplying by image in same step ok?
+
+Test difference between: 
+
+	minccalc -expression 'A[0]*log(A[1]+1)' H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc  H007.n4correct.affine_register_masked.nonlinear_register_grid_determinant.mnc blurred_image_by_det_log_one_step.mnc
+
+	minccalc -expression 'A[0]*A[1]' H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc determinant_plus_one_log.mnc blurred_image_by_det_log_multi_step.mnc
+	-> where A[1] was constructed via: 
+	minccalc -expression A[0]+1 H007.n4correct.affine_register_masked.nonlinear_register_grid_determinant.mnc determinant_plus_one.mnc	
+	minccalc -expression 'log(A[0])' determinant_plus_one.mnc determinant_plus_one_log.mnc
+
+CONCLUSION: SAME
+
+-----------------
+Comparing multiplying det second (log modulated) and multiplying det first (log modulated), there's a world of difference: multiplying det second (log modulated) image makes much more sense
+
+-----------------
+SO compare multiplying by blurred/unblurred determinant now that have order of multiplication right
+
+	minccalc -expression 'A[0]*log(A[1]+1)' H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc  H007.n4correct.affine_register_masked.nonlinear_register_grid_determinant.mnc blurred_image_by_det_log_one_step.mnc
+
+	minccalc -expression 'A[0]*log(A[1]+1)' H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.gm.mnc H007.n4correct.affine_register_masked.nonlinear_register.classify_clean.extractvbm.2mm.det_blur_forward_transform.mnc blurred_image_by_blurred_det_log_one_step.mnc
+
+CONCLUSION: Blurred determinant gives slightly blurrier output image (to be expected). 
+DECISION: Should be bluring determinant or not? I think so. Was already in pipeline, and in my notes. 
+
+---------------
+Objective: Compare (det+1) to log(det+1) (NOTE: This is with unblurred determinants, just for comparison)
+
+	register determinant_plus_one.mnc determinant_plus_one_log.mnc
+
+CONCLUSION: These are very different. Appears to be much more information in the det+1 file. 
+
+----------------
+Objective: Compare (det+1) and log(det+1) modulated images.(NOTE: This is with unblurred determinants, just for comparison)
+
+	register blurred_image_by_det_plus_one.mnc blurred_image_by_det_log_one_step.mnc
+
+CONCLUSION: Comparing the two images, they are different- each have different intensities. Not sure which one to use. 
+
+-----------------
+OVERALL CONCLUSION: Need to redo minccalc steps with image*det multiplication order. 
+Should do all calculations with both (det+1) and log(det+1) modulated images, to determine which one is best. 
+Also, can remove mincresample from extract_vbm. 
+Also, can use forward transform in mincblob. Doesn't make a difference (image values just inverted), but makes more sense intuitively. 
+	
+
+
+
+
+
+	

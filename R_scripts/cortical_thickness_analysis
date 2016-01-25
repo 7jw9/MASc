@@ -1,0 +1,61 @@
+#Cut first row (which contains subject names) from data matrix in bash (using vi) -> this is important for R treating your column values as numbers, not factors
+
+#Import cortical thickness matrix (nsubs x nvertices)
+thickness_all_subjects<-read.csv("thickness_all_subjects.txt",sep="\t",header=FALSE)
+
+#Transpose matrix
+thickness_all_subjects<-t(thickness_all_subjects)
+
+#Add subject/age info
+thickness_all_subjects<-cbind(subjects[,2:3],thickness_all_subjects)
+
+#Subset to age<60 years
+thickness_all_subjects_over_17<-subset(thickness_all_subjects,Age>17)
+
+#For Mexico dataset, remove 2 additional subjects (to retain age matching)
+thickness_under_17<-thickness_under_17[-48,]
+thickness_under_17<-thickness_under_17[-42,]
+
+#Train/test split -> make the same as for VBM analysis
+HC_train_indices<-sample(1:103,69) #sample(1:numHCsubs,numHCtrainsubs)
+SCZ_train_indices<-sample(1:88,59) #sample(1:numSZsubs,numSZtrainsubs)
+HC_train_indices<-sort(HC_train_indices) #sort indices
+SCZ_train_indices<-sort(SCZ_train_indices) #sort indices
+train_indices_qc<-c(HC_train_indices,SCZ_train_indices+103) #merge HC & SZ indices, and offset SZ indices by numHCsubs
+
+#Subtract column means
+thickness_under_60_means<-apply(thickness_under_60[3:81926],2,scale,scale=FALSE,center=TRUE)
+
+#PCA
+v2_thickness_under_60_pca_train<-prcomp(thickness_under_60_means[train_indices,])
+summary(v2_thickness_under_60_pca_train) #select PCs that explain >1% of variance
+
+#glmnet
+library(glmnet)
+source("/projects/julie/Masters/elastic_net_loop.R")
+plot(alpha, optimal.dev)
+
+#Project test data to PC space
+pred.data<-predict(v2_thickness_under_60_pca_train,thickness_under_60_means[-train_indices,])
+
+#Create model using optimal alpha
+cv.model <- cv.glmnet(v2_thickness_under_60_pca_train$x[,1:17],dx_train,family="binomial",alpha=optimal.alpha,nfolds=10,type.measure="deviance")
+plot(cv.model)
+plot(cv.model$glmnet.fit,xvar="dev",label=TRUE)
+
+#Run optimal model on test data
+test_prediction<-predict(cv.model,newx=pred.data[,1:17],s="lambda.min",type="class")
+
+#Check accuracies
+table(test_prediction,thickness_under_60[-train_indices,1])
+
+#For all variables:
+matrix_thickness_under_60<-as.matrix(thickness_under_60[,3:81926])
+
+source("/projects/julie/Masters/elastic_net_loop_R_all_variables.R")
+
+cv.model <- cv.glmnet(matrix_thickness_under_60[train_indices,],dx_train,family="binomial",alpha=0.3,nfolds=10,type.measure="deviance")
+
+test_prediction<-predict(cv.model,newx=matrix_thickness_under_60[-train_indices,],s="lambda.min",type="class")
+
+table(test_prediction,thickness_under_60[-train_indices,1])
