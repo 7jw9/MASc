@@ -1,4 +1,4 @@
-classification_code
+MASc
 ===================
 
-Bits of code from Julie's thesis
+Classification code and resources
