@@ -1,0 +1,84 @@
+#Load RMINC & glmnet libraries
+library(RMINC)
+
+#Set variable for mincIO.readVolume to work
+R_DEBUG_mincIO=FALSE
+
+#Read in minc volumes
+datafiles<-lapply(Sys.glob("../*6mm.modulated.log.gm_dwnsmpld_4.mnc"),mincIO.readVolume,VolumeType="anatomical")
+
+#Create matrix of size nsubs x nvars
+gm<-matrix(,nrow=191,ncol=1068592)
+
+#Convert all minc volumes to a vector, and store in matrix
+for (i in 1:191){
+	gm[i,]<-as.vector(datafiles[[i]])
+}
+
+#If need to create training/testing datasets (specific to dataset):
+HC_train_indices<-sample(1:103,69) #sample(1:numHCsubs,numHCtrainsubs)
+SCZ_train_indices<-sample(1:86,57) #sample(1:numSZsubs,numSZtrainsubs)
+HC_train_indices<-sort(HC_train_indices) #sort indices
+SCZ_train_indices<-sort(SCZ_train_indices) #sort indices
+train_indices<-c(HC_train_indices,SCZ_train_indices+103) #merge HC & SZ indices, and offset SZ indices by numHCsubs
+
+#Subtract mean from each column of matrix (ie. mean normalize each feature)
+gm_means<-apply(gm,2,scale,scale=FALSE,center=TRUE)
+
+#Run PCA
+gm_pca_train<-prcomp(gm_means[train_indices,])
+
+#Determine how many PCs explain >1% of the variance
+summary(gm_pca_train)
+
+#Plot PCs and print pdf
+p.variance.explained<-gm_pca_train$sdev^2/sum(gm_pca_train$sdev^2)
+barplot(100*p.variance.explained,las=2,xlab='',ylab='% Variance')
+
+pdf("figs/pcs.pdf")
+barplot(100*p.variance.explained,las=2,xlab='',ylab='% Variance')
+dev.off()
+
+#Project test data onto train data PC space
+pred.data<-predict(gm_pca_train,gm_means[-train_indices,])
+
+#Load glmnet- don't do this before load in mnc files because glmnet conflicts with RMINC for some reason
+library(glmnet)
+
+#Elastic net cross-validation
+source("/projects/julie/Masters/elastic_net_loop.R")
+
+#Create dx vector with diagnosis
+dx<-length(nsubs)
+dx[1:nHC]<-"0"
+dx[nHC+1:end]<-"1"
+
+#Determine optimal alpha & write plot to pdf
+plot(alpha,optimal.dev)
+
+pdf("alpha.optimal.dev.pdf")
+plot(alpha,optimal.dev)
+dev.off()
+
+#Create and store a CV model using optimal alpha (have to insert manually)- this will store optimal lambda for this value of alpha in cv.model$lambda.1se
+cv.model <- cv.glmnet(gm_pca_train$x[,1:18],dx[train_indices],family="binomial",alpha=optimal.alpha,nfolds=10,type.measure="deviance")
+
+#Check out CV model and print to pdf
+plot(cv.model)
+
+pdf("cv.model.pdf")
+plot(cv.model)
+dev.off()
+
+#Can check out model here too (model is with ALL subjects) and print to pdf
+plot(cv.model$glmnet.fit,xvar="dev",label=TRUE)
+
+pdf("glmnet.fit.pdf")
+plot(cv.model$glmnet.fit,xvar="dev",label=TRUE)
+dev.off()
+
+#Use optimal model from cross-validation on test data
+test_prediction<-predict(cv.model,newx=pred.data[,1:18],s="lambda.min",type="class")
+
+#Check accuracies- table in format of columns: actual class labels; rows: predicted class labels; sum of columns: total num in each class
+table(test_prediction,dx[-train_indices])
